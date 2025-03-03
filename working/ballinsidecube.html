@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Physics Animation - Bouncing Boxes</title>
+    <style>
+        html, body {
+            padding: 0;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            cursor: grab;
+        }
+
+        .container:active {
+            cursor: grabbing;
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 100;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: Arial, sans-serif;
+        }
+
+        button {
+            margin: 5px;
+            padding: 8px 12px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .slider-container {
+            margin: 10px 0;
+        }
+
+        .slider-container label {
+            display: inline-block;
+            width: 120px;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <canvas id="canvas"></canvas>
+        <div class="controls">
+            <button id="throwBoxes">Throw Boxes</button>
+            <button id="changeColor">Change Color</button>
+            <div class="slider-container">
+                <label for="gravitySlider">Gravity: </label>
+                <input type="range" id="gravitySlider" min="1" max="20" value="10">
+                <span id="gravityValue">10</span>
+            </div>
+            <div class="slider-container">
+                <label for="boxesSlider">Number of Boxes: </label>
+                <input type="range" id="boxesSlider" min="10" max="300" value="100">
+                <span id="boxesValue">100</span>
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.151.0/three.module.min.js",
+            "three/addons/": "https://unpkg.com/three@0.151.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+
+    <script type="module">
+        import * as CANNON from "https://cdn.skypack.dev/cannon-es";
+        import * as THREE from "three";
+        import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+        import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+
+        const canvasEl = document.querySelector("#canvas");
+        const containerEl = document.querySelector(".container");
+        const throwBoxesBtn = document.getElementById("throwBoxes");
+        const changeColorBtn = document.getElementById("changeColor");
+        const gravitySlider = document.getElementById("gravitySlider");
+        const gravityValue = document.getElementById("gravityValue");
+        const boxesSlider = document.getElementById("boxesSlider");
+        const boxesValue = document.getElementById("boxesValue");
+
+        let renderer, scene, camera, orbit, physicsWorld, boxMaterial, dummy;
+        let instancedBoxesMesh, boxesBodies = [];
+        let colorIndex = 0;
+        const colors = [
+            0x000000, 0x3498db, 0xe74c3c, 0x2ecc71, 0xf39c12, 
+            0x9b59b6, 0x1abc9c, 0xd35400, 0x2c3e50, 0x27ae60
+        ];
+
+        const params = {
+            boxesNumber: parseInt(boxesSlider.value),
+            boxSize: 0.03,
+            containerSize: 1,
+            gravity: parseInt(gravitySlider.value),
+            exploding: false
+        };
+
+        gravitySlider.addEventListener("input", function() {
+            params.gravity = parseInt(this.value);
+            gravityValue.textContent = this.value;
+        });
+
+        boxesSlider.addEventListener("input", function() {
+            boxesValue.textContent = this.value;
+        });
+
+        boxesSlider.addEventListener("change", function() {
+            resetBoxes(parseInt(this.value));
+        });
+
+        initPhysics();
+        initScene();
+        throwBoxes();
+        boxMaterial.visible = true;
+        render();
+
+        window.addEventListener("resize", updateSceneSize);
+        containerEl.addEventListener("dblclick", throwBoxes);
+        throwBoxesBtn.addEventListener("click", throwBoxes);
+        changeColorBtn.addEventListener("click", changeBoxColor);
+
+        function initScene() {
+            renderer = new THREE.WebGLRenderer({
+                antialias: true,
+                canvas: canvasEl
+            });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xffffff);
+
+            camera = new THREE.PerspectiveCamera(45, containerEl.clientWidth / containerEl.clientHeight, 0.1, 100)
+            camera.position.set(0, 1, 0.5).multiplyScalar(5);
+
+            updateSceneSize();
+
+            dummy = new THREE.Object3D();
+
+            orbit = new OrbitControls(camera, canvasEl);
+            orbit.enableZoom = true;
+            orbit.enablePan = false;
+            orbit.minPolarAngle = 0.1 * Math.PI;
+            orbit.maxPolarAngle = 0.9 * Math.PI;
+            orbit.autoRotate = true;
+            orbit.autoRotateSpeed = 10;
+            orbit.enableDamping = true;
+
+            // Create container walls
+            for (let i = 0; i < 6; i++) {
+                const body = new CANNON.Body({
+                    mass: 0,
+                    shape: new CANNON.Plane(),
+                });
+                physicsWorld.addBody(body);
+
+                const posSign = i % 2 ? 1 : (-1);
+                if (i < 2) {
+                    body.position.x = posSign * 0.5 * params.containerSize;
+                    body.quaternion.setFromEuler(0, -posSign * Math.PI / 2, 0);
+                } else if (i < 4) {
+                    body.position.y = posSign * 0.5 * params.containerSize;
+                    body.quaternion.setFromEuler(posSign * Math.PI / 2, 0, 0);
+                } else {
+                    body.position.z = posSign * 0.5 * params.containerSize;
+                    if (i > 4) {
+                        body.quaternion.setFromEuler(0, Math.PI, 0);
+                    }
+                }
+            }
+
+            boxMaterial = new THREE.MeshPhongMaterial({
+                color: colors[colorIndex],
+                specular: 0x111111,
+                shininess: 30,
+                visible: false
+            });
+            
+            createBoxes();
+
+            // Add the container wireframe
+            const wallGeometry = new THREE.BoxGeometry(params.containerSize, params.containerSize, params.containerSize);
+            const wallEdges = new THREE.EdgesGeometry(wallGeometry);
+            const wallLine = new THREE.LineSegments(wallEdges, new THREE.LineBasicMaterial({color: 0x000000}));
+            scene.add(wallLine);
+
+            // Add lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+
+            const pointLight = new THREE.PointLight(0xffffff, 0.5);
+            pointLight.position.set(-1, 1, -1);
+            scene.add(pointLight);
+        }
+
+        function createBoxes() {
+            // Clear existing boxes if any
+            if (instancedBoxesMesh) {
+                scene.remove(instancedBoxesMesh);
+            }
+            
+            boxesBodies = [];
+            
+            const boxGeometry = new RoundedBoxGeometry(params.boxSize, params.boxSize, params.boxSize, 2, 0.2 * params.boxSize);
+            instancedBoxesMesh = new THREE.InstancedMesh(boxGeometry, boxMaterial, params.boxesNumber);
+            instancedBoxesMesh.castShadow = true;
+            instancedBoxesMesh.receiveShadow = true;
+            scene.add(instancedBoxesMesh);
+
+            for (let i = 0; i < params.boxesNumber; i++) {
+                boxesBodies[i] = new CANNON.Body({
+                    mass: 1,
+                    shape: new CANNON.Box(new CANNON.Vec3(0.6 * params.boxSize, 0.6 * params.boxSize, 0.6 * params.boxSize)),
+                });
+                
+                // Random initial positions within the container
+                boxesBodies[i].position.set(
+                    (Math.random() - 0.5) * 0.8 * params.containerSize,
+                    (Math.random() - 0.5) * 0.8 * params.containerSize,
+                    (Math.random() - 0.5) * 0.8 * params.containerSize
+                );
+                
+                physicsWorld.addBody(boxesBodies[i]);
+            }
+        }
+
+        function resetBoxes(newBoxCount) {
+            // Remove existing boxes from physics world
+            for (let i = 0; i < boxesBodies.length; i++) {
+                physicsWorld.removeBody(boxesBodies[i]);
+            }
+            
+            params.boxesNumber = newBoxCount;
+            createBoxes();
+            throwBoxes();
+        }
+
+        function initPhysics() {
+            physicsWorld = new CANNON.World({
+                allowSleep: true,
+                gravity: new CANNON.Vec3(0, -params.gravity, 0),
+            });
+            physicsWorld.defaultContactMaterial.friction = 0.1;
+            physicsWorld.defaultContactMaterial.restitution = 0.9;
+        }
+
+        function render() {
+            orbit.update();
+            physicsWorld.fixedStep();
+
+            for (let i = 0; i < params.boxesNumber; i++) {
+                dummy.position.copy(boxesBodies[i].position);
+                dummy.quaternion.copy(boxesBodies[i].quaternion);
+                dummy.updateMatrix();
+                instancedBoxesMesh.setMatrixAt(i, dummy.matrix);
+            }
+            instancedBoxesMesh.instanceMatrix.needsUpdate = true;
+
+            // Apply gravity relative to camera orientation
+            const gravity = new THREE.Vector3(0, -params.gravity, 0);
+            gravity.applyQuaternion(camera.quaternion);
+            physicsWorld.gravity = new CANNON.Vec3(gravity.x, gravity.y, gravity.z);
+
+            renderer.render(scene, camera);
+            requestAnimationFrame(render);
+        }
+
+        function throwBoxes() {
+            params.exploding = false;
+            
+            boxesBodies.forEach(body => {
+                const force = 7;
+                body.applyImpulse(
+                    new CANNON.Vec3(
+                        Math.random() > 0.5 ? -force : force,
+                        Math.random() > 0.5 ? -force : force,
+                        Math.random() > 0.5 ? -force : force
+                    ),
+                );
+            });
+        }
+
+        function explodeBoxes() {
+            params.exploding = true;
+            
+            const center = new CANNON.Vec3(0, 0, 0);
+            const explodeForce = 15;
+            
+            boxesBodies.forEach(body => {
+                // Calculate direction away from center
+                const direction = new CANNON.Vec3();
+                direction.copy(body.position);
+                direction.vsub(center, direction);
+                direction.normalize();
+                direction.scale(explodeForce, direction);
+                
+                body.applyImpulse(direction);
+            });
+        }
+
+        function changeBoxColor() {
+            colorIndex = (colorIndex + 1) % colors.length;
+            boxMaterial.color.setHex(colors[colorIndex]);
+            
+            // Alternate between throw and explode
+            if (params.exploding) {
+                throwBoxes();
+            } else {
+                explodeBoxes();
+            }
+        }
+
+        function updateSceneSize() {
+            camera.aspect = containerEl.clientWidth / containerEl.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(containerEl.clientWidth, containerEl.clientHeight);
+        }
+    </script>
+</body>
+</html>

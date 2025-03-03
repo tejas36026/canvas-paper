@@ -1,0 +1,242 @@
+<div class="container">
+    <svg></svg>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+<style>
+
+
+body {
+    font-family: sans-serif;
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    font-size: 25px;
+    background-color: #fff3f0;
+}
+
+.container {
+    width: 100%;
+    height: 100%;
+    max-width: 600px;
+    max-height: 600px;
+    position: relative;
+}
+
+.container svg {
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+}
+
+.lil-gui {
+    --width: 450px;
+    max-width: 90%;
+    --widget-height: 20px;
+    font-size: 15px;
+    --input-font-size: 15px;
+    --padding: 10px;
+    --spacing: 10px;
+    --slider-knob-width: 5px;
+    --background-color: rgba(5, 0, 15, .8);
+    --widget-color: rgba(255, 255, 255, .3);
+    --focus-color: rgba(255, 255, 255, .4);
+    --hover-color: rgba(255, 255, 255, .5);
+
+    --font-family: monospace;
+}
+    
+</style>
+
+<script type ="module">
+
+
+
+
+
+
+
+import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.18.2/+esm"
+
+const width = 400, height = 400;
+const svg = d3.select(".container svg")
+    .attr("viewBox", "0 0 " + width + " " + height);
+
+const center = {x: width / 2, y: height / 2};
+let groups = [];
+let nodes, circles, simulation, toggleBtn;
+
+const params = {
+    groupsNumber: 5,
+    decay: 0.25,
+    strength: .03,
+    isGrouped: true,
+    restart: restart,
+    toggle: toggle,
+}
+
+restart();
+createControls()
+
+svg.on("click", toggle);
+
+
+// ==========================
+// For Codepen preview only
+setTimeout(() => {
+    splitGroups();
+}, 900);
+// setTimeout(() => {
+    // splitGroups();
+// }, 1500);
+// ==========================
+
+
+function restart() {
+    params.isGrouped = false;
+    createSimulation();
+    groupGroups();
+}
+
+function toggle() {
+    toggleBtn.domElement.querySelector(".name").innerHTML = params.isGrouped ? "group" : "mix";
+    if (params.isGrouped) {
+        groupGroups();
+    } else {
+        splitGroups();
+    }
+    params.isGrouped = !params.isGrouped;
+}
+
+function createSimulation() {
+    nodes = Array.from({length: 75 + Math.floor(Math.random() * 100)}, () => {
+        return {
+            radius: 4,
+            value: Math.random(),
+            x: Math.random() * width,
+            y: Math.random() * height
+        }
+    });
+
+    svg.selectAll("circle").remove();
+
+    circles = svg
+        .selectAll(".bubble")
+        .data(nodes, d => d)
+        .enter()
+        .append("circle")
+        .attr("r", 0)
+        .attr("fill", d => "hsl(" + (160 + d.value * 300) % 360 + ", 70%, 55%)");
+
+    circles
+        .transition().duration(500).attr("r", d => d.radius);
+
+    if (simulation) {
+        simulation.stop();
+    }
+    simulation = d3.forceSimulation()
+        .force("x", d3.forceX().strength(params.strength).x(center.x))
+        .force("y", d3.forceY().strength(params.strength).y(center.y))
+        .force("charge", d3.forceManyBody().strength(-1))
+        .on("tick", () => {
+            circles
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y);
+        })
+        .nodes(nodes)
+        .alpha(1)
+        .restart()
+        .stop();
+}
+
+function groupGroups() {
+    simulation
+        .force("x", d3
+            .forceX().strength(params.strength).x(center.x)
+        )
+        .force("y", d3
+            .forceY().strength(params.strength).y(center.y)
+        )
+        .velocityDecay(.23)
+        .alpha(6)
+        .restart();
+}
+
+function splitGroups() {
+
+    // re-init groups
+    if (params.groupsNumber > 2) {
+        const randomWidths = Array.from({length: params.groupsNumber}, () => Math.random());
+        const totalWidth = randomWidths.reduce((sum, width) => sum + width, 0);
+        const normalizedWidths = randomWidths.map(width => width / totalWidth);
+        let cumulative = 0;
+        groups = normalizedWidths.map(w => {
+            cumulative += w;
+            return cumulative - w / 2;
+        });
+    } else {
+        groups[0] = .1 * (Math.random() - .5);
+        groups[1] = groups[0] + .5;
+    }
+
+    const randomDist = Array.from({length: params.groupsNumber}, () => .15 + .15 * Math.random());
+    groups = groups.map((angle, idx) => {
+        return {
+            angle,
+            x: randomDist[idx] * width * Math.cos(Math.PI * 2 * angle) + center.x,
+            y: randomDist[idx] * height * Math.sin(Math.PI * 2 * angle) + center.y
+        }
+    });
+
+    // re-assign groups
+    const closestGroup = v => {
+        let closestGroup = groups[0];
+        let smallestDifference = Math.abs(v - closestGroup.angle);
+        for (let i = 1; i < groups.length; i++) {
+            const difference = Math.abs(v - groups[i].angle);
+            if (difference < smallestDifference) {
+                smallestDifference = difference;
+                closestGroup = groups[i];
+            }
+        }
+        return closestGroup;
+    }
+
+    // restart simulation
+    simulation
+        .force("x", d3
+            .forceX().strength(params.strength).x(d => closestGroup(d.value).x)
+        )
+        .force("y", d3
+            .forceY().strength(params.strength).y(d => closestGroup(d.value).y)
+        )
+        .alpha(5)
+        .velocityDecay(.24)
+        .restart();
+}
+
+
+function createControls() {
+    const gui = new GUI();
+
+    gui
+        .add(params, "groupsNumber", 2, 6, 1)
+        .onChange(() => {
+            toggleBtn.domElement.querySelector(".name").innerHTML = "mix";
+            params.isGrouped = true;
+            splitGroups();
+        })
+        .name("number of groups")
+    
+    gui
+        .add(params, "restart")
+    
+    toggleBtn = gui
+        .add(params, "toggle")
+}
+
+</script>
+

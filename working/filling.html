@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orange Animation</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/DrawSVGPlugin.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/CustomEase.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/Physics2DPlugin.min.js"></script>
+  <style>
+    body {
+      background-color: #222;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center; 
+    }
+
+    body, html {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    svg {
+      width: 100%;
+      height: 100%;
+      visibility: hidden;
+    }
+
+    .mainColor {
+      fill: #FE6A00;
+    }
+
+    .lineColor {
+      stroke: #FE6A00;
+    }
+  </style>
+</head>
+<body>
+  <svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <defs>
+      <g id="mainOrange">
+        <radialGradient id="mainOrangeGrad" cx="405.3708" cy="278.2636" r="78.7824" gradientUnits="userSpaceOnUse">
+          <stop offset="0" style="stop-color:#EDB320"/>
+          <stop offset="0.9378" style="stop-color:#FB5605"/>
+        </radialGradient>
+        <path class="orange" fill="url(#mainOrangeGrad)" d="M453.7,302c0,26.5-24.4,47.5-53.7,47.5s-51.7-21-51.7-47.5s22.4-49.4,51.7-49.4
+              S453.7,275.5,453.7,302z"/>
+        <path class="mainCore" fill="#098003" d="M412,268.7c-8-5.3-14.9,0-14.9,0s8.1-4.5,0-9.8c8,5.3,14.9,0,14.9,0S404,263.4,412,268.7z"/>
+        <path class="mainStalk" fill="#0A9403" d="M415.6,226.1c0.8,6.4-9.2,21.7-9.3,33c0,1.1,0.1,3.4-0.5,4.4c-0.8,1.4-2.4,0.4-3-1.5
+              c-2.3-7,6.3-37.1,10.9-38.2C414.3,223.7,415.3,224.3,415.6,226.1z"/>
+        <path class="mainLeaf" fill="#0A9403" d="M418.4,233.2c3-5.1,25.6,1.7,41.4,13.5c4,3,6.1,4.6,5.7,6c-1.3,4.5-28.4,6.4-41.9-8.9
+              C421.9,241.9,416.7,236,418.4,233.2z"/>
+      </g>  
+      <radialGradient id="orangeGrad" cx="405.3708" cy="278.2636" r="78.7824" gradientUnits="userSpaceOnUse">
+        <stop offset="0" style="stop-color:#EDB320"/>
+        <stop offset="0.9378" style="stop-color:#FB5605"/>
+      </radialGradient>
+      <circle id="particle" class="mainColor" cx="0" cy="0" r="2" fill="#3D472E" />
+      <clipPath id="circleMask">
+        <path class="orange" id="orange" d="M453.7,302c0,26.5-24.4,47.5-53.7,47.5s-51.7-21-51.7-47.5s22.4-49.4,51.7-49.4S453.7,275.5,453.7,302z"/>
+      </clipPath>
+    </defs>
+
+    <line class="fillLine lineColor" x1="400" x2="400" y1="54" y2="345" stroke-width="5" stroke="url(#orangeGrad)" stroke-linecap="round"/>
+   
+    <g class="pContainer"></g>
+    <g class="wholeOrange">
+      <mask id="orangeAnimMask">
+        <g clip-path="url(#circleMask)" class="fullCircle">
+          <path class="circleFill" fill="#FFF" d="M600,8.1c0,0-14.6-0.6-19.7-1.1c-5-0.5-10.2-1-20.3-1s-15.3,0.5-20.3,1
+                c-5.1,0.5-9.8,1-19.7,1c-9.8,0-14.6-0.5-19.7-1c-5-0.5-10.2-1-20.3-1c-10.2,0-15.4,0.8-20.5,1.5c-5,0.8-9.8,1.5-19.5,1.5
+                c-9.7,0-14.4-0.9-19.4-1.9C415.5,6,410.3,5,400,5c-10.4,0-15.7,1.3-20.8,2.6c-4.9,1.2-9.6,2.4-19.2,2.4c-9.5,0-14.2-1.4-19.1-2.9
+                C335.8,5.6,330.5,4,320,4c-10.5,0-15.9,1.9-21.1,3.7C294,9.4,289.4,11,280,11c-9.4,0-14-1.8-18.8-3.8C256,5.2,250.6,3,240,3
+                c-10.7,0-16.1,2.4-21.3,4.8C213.8,10,209.3,12,200,12c-9.2,0-13.8-2.3-18.6-4.7C176.2,4.7,170.7,2,160,2c-10.9,0-16.6,3.4-21.7,6.5
+                c-4.7,2.8-9.2,5.5-18.3,5.5c-9,0-13.2-3-18.2-6.4C96.8,4,91,0,80,0C69,0,63.2,4,58.2,7.6C53.2,11,49,14,40,14s-13.2-3-18.2-6.4
+                C16.8,4,11,0,0,0v200h600h200V8.1H600z"/> 
+        </g>
+      </mask>
+      <g mask="url(#orangeAnimMask)" class="hideOrange">
+        <use xlink:href="#orange" fill="url(#orangeGrad)"/>
+      </g>
+      <path class="core hideOrange" fill="#098003" d="M412,268.7c-8-5.3-14.9,0-14.9,0s8.1-4.5,0-9.8c8,5.3,14.9,0,14.9,0S404,263.4,412,268.7z"/> 
+      <path class="stalk hideOrange" fill="#0A9403" d="M415.6,226.1c0.8,6.4-9.2,21.7-9.3,33c0,1.1,0.1,3.4-0.5,4.4c-0.8,1.4-2.4,0.4-3-1.5
+              c-2.3-7,6.3-37.1,10.9-38.2C414.3,223.7,415.3,224.3,415.6,226.1z"/>
+      <path class="leaf hideOrange" fill="#0A9403" d="M418.4,233.2c3-5.1,25.6,1.7,41.4,13.5c4,3,6.1,4.6,5.7,6c-1.3,4.5-28.4,6.4-41.9-8.9
+              C421.9,241.9,416.7,236,418.4,233.2z"/>
+    </g>
+  </svg>
+
+  <script>
+    var xmlns = "http://www.w3.org/2000/svg",
+    xlinkns = "http://www.w3.org/1999/xlink",
+    select = function(s) {
+      return document.querySelector(s);
+    },
+    selectAll = function(s) {
+      return document.querySelectorAll(s);
+    },
+    mainTl,
+    circleFill = select('.circleFill'),
+    dot = select('#splash'),
+    pContainer = select('.pContainer'),
+    particlePool = [],
+    numParticles = 23,
+    particleCount = 0,
+    fillLine = select('.fillLine'),
+    orangeRollEase = CustomEase.create("returning", "M0,0 C0.076,0.736 0.326,0.855 0.53,0.736 0.73,0.618 1,0 1,0");
+
+    TweenMax.set('svg', {
+      visibility: 'visible'
+    });
+
+    TweenMax.set(circleFill, {
+      x: 356,
+      y: 350
+    });
+
+    mainTl = new TimelineMax({
+      repeat: -1,
+      repeatDelay: 2
+    });
+
+    mainTl.from(fillLine, 1, {
+      drawSVG: '0% 0%',
+      ease: Power4.easeIn,
+      onComplete: playParticles,
+      onCompleteParams: [{
+        x: 400,
+        y: 344,
+        num: 30
+      }]
+    })
+    .to(circleFill, 5, {
+      x: -220,
+      y: 220
+    }, '-=0.05')
+    .to(fillLine, 0.3, {
+      drawSVG: '100% 100%',
+      ease: Sine.easeIn,
+      onComplete: playParticles,
+      onCompleteParams: [{
+        x: 400,
+        y: 255
+      }]
+    }, '-=2.46')
+    .from('.core', 0.4, {
+      scale: 0,
+      transformOrigin: '50% 50%'
+    }, '-=2.2')
+    .from('.stalk', 1, {
+      scale: 0,
+      transformOrigin: '20% 100%',
+      ease: Elastic.easeOut.config(0.84, 0.37)
+    }, '-=2.2')
+    .from('.leaf', 2, {
+      scale: 0,
+      transformOrigin: '0% 0%',
+      rotation: 23,
+      ease: Elastic.easeOut.config(1.4, 0.37)
+    }, '-=1.89')
+    .to('.wholeOrange', 0.6, { 
+      rotation: -9,
+      transformOrigin: '50% 100%',
+      immediateRender: false,
+      ease: orangeRollEase
+    }, '-=2.3')
+    .to('.wholeOrange', 1, {
+      scale: 1.061,
+      transformOrigin: '50% 100%',
+      ease: Expo.easeIn,
+      onComplete: playParticles,
+      onCompleteParams: [{
+        x: 400,
+        y: 300
+      }]
+    })
+    .set('.wholeOrange', {
+      autoAlpha: 0
+    });
+
+    function createParticles() {
+      var i = numParticles,
+      p;
+      
+      while (--i > -1) {
+        p = document.createElementNS(xmlns, 'use');
+        p.setAttributeNS(xlinkns, "xlink:href", '#particle');
+        pContainer.appendChild(p);
+        p.setAttribute('class', "particle");
+        TweenMax.set(p, {
+          scale: randomBetween(1, 7),
+          autoAlpha: 0
+        });
+        particlePool.push(p);
+      }
+    }
+
+    function playParticles(obj) {
+      var i = particlePool.length;
+
+      while (--i > -1) {
+        var p = particlePool[i];
+        var curr = {
+          x: obj.x,
+          y: obj.y
+        };
+
+        TweenMax.set(p, {
+          x: curr.x,
+          y: curr.y,
+          transformOrigin: '50% 50%'
+        });
+
+        var tl = new TimelineMax();
+        tl.set(p, {
+          autoAlpha: 1
+        })
+        .to(p, randomBetween(1, 23) / 10, {
+          physics2D: {
+            velocity: randomBetween(240, 370),
+            angle: randomBetween(-130, -45),
+            gravity: randomBetween(550, 600)
+          },
+          scale: 0,
+          onComplete: completeParticle,
+          onCompleteParams: [p],
+          alpha: 1
+        });
+
+        particleCount++;
+        particleCount = (particleCount >= numParticles) ? 0 : particleCount;
+      }
+    }
+
+    function completeParticle(p) {
+      TweenMax.set(p, {
+        scale: randomBetween(1, 3),
+        alpha: 0
+      });
+    }
+
+    function randomBetween(min, max) {
+      return Math.floor(Math.random() * (max - min + 1) + min);
+    }
+
+    createParticles();
+  </script>
+</body>
+</html>

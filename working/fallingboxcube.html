@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Physics Animation - Bouncing Boxes in Cube</title>
+    <style>
+        html, body {
+            padding: 0;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            cursor: grab;
+        }
+
+        .container:active {
+            cursor: grabbing;
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 100;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: Arial, sans-serif;
+        }
+
+        button {
+            margin: 5px;
+            padding: 8px 12px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .slider-container {
+            margin: 10px 0;
+        }
+
+        .slider-container label {
+            display: inline-block;
+            width: 120px;
+            margin-right: 10px;
+        }
+
+        canvas {
+            background-color: #ffffff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <canvas id="canvas"></canvas>
+        <div class="controls">
+            <button id="throwBoxes">Throw Boxes</button>
+            <button id="changeColor">Change Color</button>
+            <div class="slider-container">
+                <label for="gravitySlider">Gravity: </label>
+                <input type="range" id="gravitySlider" min="1" max="20" value="10">
+                <span id="gravityValue">10</span>
+            </div>
+            <div class="slider-container">
+                <label for="boxesSlider">Number of Boxes: </label>
+                <input type="range" id="boxesSlider" min="10" max="100" value="50">
+                <span id="boxesValue">50</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const containerEl = document.querySelector(".container");
+        const throwBoxesBtn = document.getElementById("throwBoxes");
+        const changeColorBtn = document.getElementById("changeColor");
+        const gravitySlider = document.getElementById("gravitySlider");
+        const gravityValue = document.getElementById("gravityValue");
+        const boxesSlider = document.getElementById("boxesSlider");
+        const boxesValue = document.getElementById("boxesValue");
+
+        // Set canvas dimensions
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Box properties
+        let boxSize = 20;
+        let colorIndex = 0;
+        const colors = [
+            '#000000', '#3498db', '#e74c3c', '#2ecc71', '#f39c12', 
+            '#9b59b6', '#1abc9c', '#d35400', '#2c3e50', '#27ae60'
+        ];
+        let currentColor = colors[colorIndex];
+
+        // Physics parameters
+        let gravity = parseInt(gravitySlider.value) / 10;
+        let boxesCount = parseInt(boxesSlider.value);
+        let dragEnabled = false;
+        let dragStartX, dragStartY;
+        let cameraRotation = { x: Math.PI/6, y: Math.PI/4 }; // Initial rotation
+        
+        // Container box parameters
+        const containerSize = Math.min(canvas.width, canvas.height) * 0.6;
+        const containerDepth = containerSize;
+        let containerCenter = { x: canvas.width/2, y: canvas.height/2, z: 0 };
+
+        // Create boxes array
+        let boxes = [];
+
+        // Box class definition
+        class Box {
+            constructor() {
+                this.size = boxSize;
+                // Position boxes randomly within the container
+                this.x = (Math.random() - 0.5) * containerSize * 0.8;
+                this.y = (Math.random() - 0.5) * containerSize * 0.8;
+                this.z = (Math.random() - 0.5) * containerDepth * 0.8;
+                
+                this.vx = (Math.random() - 0.5) * 10;
+                this.vy = (Math.random() - 0.5) * 10;
+                this.vz = (Math.random() - 0.5) * 10;
+                this.color = currentColor;
+                this.angle = { x: Math.random() * Math.PI * 2, y: Math.random() * Math.PI * 2, z: Math.random() * Math.PI * 2 };
+                this.angularVelocity = { 
+                    x: (Math.random() - 0.5) / 5, 
+                    y: (Math.random() - 0.5) / 5, 
+                    z: (Math.random() - 0.5) / 5 
+                };
+            }
+
+            update() {
+                // Apply gravity - rotated by camera
+                const gravityRotated = {
+                    x: Math.sin(cameraRotation.y) * gravity,
+                    y: Math.cos(cameraRotation.x) * gravity,
+                    z: Math.sin(cameraRotation.x) * Math.cos(cameraRotation.y) * gravity
+                };
+                
+                this.vx += gravityRotated.x;
+                this.vy += gravityRotated.y;
+                this.vz += gravityRotated.z;
+                
+                // Update position
+                this.x += this.vx;
+                this.y += this.vy;
+                this.z += this.vz;
+                
+                // Update rotation
+                this.angle.x += this.angularVelocity.x;
+                this.angle.y += this.angularVelocity.y;
+                this.angle.z += this.angularVelocity.z;
+                
+                // Boundary collision detection (with bounce) inside the container
+                const halfContainerSize = containerSize / 2;
+                const halfContainerDepth = containerDepth / 2;
+                
+                if (this.x < -halfContainerSize || this.x > halfContainerSize) {
+                    this.vx *= -0.8; // Bounce with energy loss
+                    this.x = this.x < -halfContainerSize ? -halfContainerSize : halfContainerSize;
+                }
+                
+                if (this.y < -halfContainerSize || this.y > halfContainerSize) {
+                    this.vy *= -0.8;
+                    this.y = this.y < -halfContainerSize ? -halfContainerSize : halfContainerSize;
+                }
+                
+                if (this.z < -halfContainerDepth || this.z > halfContainerDepth) {
+                    this.vz *= -0.8;
+                    this.z = this.z < -halfContainerDepth ? -halfContainerDepth : halfContainerDepth;
+                }
+                
+                // Apply drag/friction
+                this.vx *= 0.99;
+                this.vy *= 0.99;
+                this.vz *= 0.99;
+            }
+
+            // Project 3D coordinates to 2D with rotation
+            project() {
+                // Apply camera rotation
+                let x = this.x;
+                let y = this.y;
+                let z = this.z;
+                
+                // Rotate around Y axis
+                const cosY = Math.cos(cameraRotation.y);
+                const sinY = Math.sin(cameraRotation.y);
+                const tempX = x * cosY - z * sinY;
+                const tempZ = z * cosY + x * sinY;
+                x = tempX;
+                z = tempZ;
+                
+                // Rotate around X axis
+                const cosX = Math.cos(cameraRotation.x);
+                const sinX = Math.sin(cameraRotation.x);
+                const tempY = y * cosX - z * sinX;
+                z = z * cosX + y * sinX;
+                y = tempY;
+
+                // Apply perspective
+                const perspective = 1000;
+                const scale = perspective / (perspective + z);
+                
+                // Transform to screen coordinates
+                return {
+                    x: containerCenter.x + x * scale,
+                    y: containerCenter.y + y * scale,
+                    scale: scale
+                };
+            }
+
+            draw() {
+                // Get projected position
+                const pos = this.project();
+                const projectedSize = this.size * pos.scale;
+                
+                // Don't draw if behind the camera
+                if (pos.scale <= 0) return;
+                
+                // Draw box
+                ctx.save();
+                ctx.translate(pos.x, pos.y);
+                ctx.rotate(this.angle.z);
+                
+                // Apply 3D-like rendering with shading based on rotation
+                const shade = Math.abs(Math.sin(this.angle.x) * 0.5) + 0.5;
+                const r = parseInt(this.color.substr(1, 2), 16);
+                const g = parseInt(this.color.substr(3, 2), 16);
+                const b = parseInt(this.color.substr(5, 2), 16);
+                const shadedColor = `rgb(${Math.floor(r * shade)}, ${Math.floor(g * shade)}, ${Math.floor(b * shade)})`;
+                
+                ctx.fillStyle = shadedColor;
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 1 * pos.scale;
+                
+                // Draw box with some 3D effect
+                ctx.fillRect(-projectedSize / 2, -projectedSize / 2, projectedSize, projectedSize);
+                ctx.strokeRect(-projectedSize / 2, -projectedSize / 2, projectedSize, projectedSize);
+                
+                // Add shading edge
+                const edgeShade = Math.abs(Math.cos(this.angle.y) * 0.3);
+                ctx.fillStyle = `rgba(0, 0, 0, ${edgeShade})`;
+                ctx.fillRect(-projectedSize / 2, -projectedSize / 2, projectedSize / 6, projectedSize);
+                ctx.fillRect(-projectedSize / 2, -projectedSize / 2, projectedSize, projectedSize / 6);
+                
+                ctx.restore();
+            }
+        }
+
+        // Function to draw the cube container
+        function drawContainer() {
+            const halfSize = containerSize / 2;
+            const vertices = [
+                // Front face vertices
+                { x: -halfSize, y: -halfSize, z: -halfSize },
+                { x: halfSize, y: -halfSize, z: -halfSize },
+                { x: halfSize, y: halfSize, z: -halfSize },
+                { x: -halfSize, y: halfSize, z: -halfSize },
+                // Back face vertices
+                { x: -halfSize, y: -halfSize, z: halfSize },
+                { x: halfSize, y: -halfSize, z: halfSize },
+                { x: halfSize, y: halfSize, z: halfSize },
+                { x: -halfSize, y: halfSize, z: halfSize }
+            ];
+            
+            // Project all vertices
+            const projectedVertices = vertices.map(vertex => {
+                // Apply camera rotation
+                let x = vertex.x;
+                let y = vertex.y;
+                let z = vertex.z;
+                
+                // Rotate around Y axis
+                const cosY = Math.cos(cameraRotation.y);
+                const sinY = Math.sin(cameraRotation.y);
+                const tempX = x * cosY - z * sinY;
+                const tempZ = z * cosY + x * sinY;
+                x = tempX;
+                z = tempZ;
+                
+                // Rotate around X axis
+                const cosX = Math.cos(cameraRotation.x);
+                const sinX = Math.sin(cameraRotation.x);
+                const tempY = y * cosX - z * sinX;
+                z = z * cosX + y * sinX;
+                y = tempY;
+
+                // Apply perspective
+                const perspective = 1000;
+                const scale = perspective / (perspective + z);
+                
+                // Transform to screen coordinates
+                return {
+                    x: containerCenter.x + x * scale,
+                    y: containerCenter.y + y * scale,
+                    z: z
+                };
+            });
+            
+            // Define edges
+            const edges = [
+                // Front face
+                [0, 1], [1, 2], [2, 3], [3, 0],
+                // Back face
+                [4, 5], [5, 6], [6, 7], [7, 4],
+                // Connecting edges
+                [0, 4], [1, 5], [2, 6], [3, 7]
+            ];
+            
+            // Draw edges
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 1;
+            
+            for (const edge of edges) {
+                const v1 = projectedVertices[edge[0]];
+                const v2 = projectedVertices[edge[1]];
+                
+                // Only draw if both vertices are in front of the camera
+                if (v1.z < 0 && v2.z < 0) continue;
+                
+                ctx.beginPath();
+                ctx.moveTo(v1.x, v1.y);
+                ctx.lineTo(v2.x, v2.y);
+                ctx.stroke();
+            }
+        }
+
+        // Create initial boxes
+        function createBoxes() {
+            boxes = [];
+            for (let i = 0; i < boxesCount; i++) {
+                boxes.push(new Box());
+            }
+        }
+
+        // Main animation loop
+        function animate() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Center the container
+            containerCenter = { x: canvas.width/2, y: canvas.height/2, z: 0 };
+            
+            // Draw the container
+            drawContainer();
+            
+            // Sort boxes by z-index for correct rendering order
+            boxes.sort((a, b) => {
+                // Calculate z depth after projection
+                const zA = a.z * Math.cos(cameraRotation.x) * Math.cos(cameraRotation.y) + 
+                          a.y * Math.sin(cameraRotation.x) +
+                          a.x * Math.sin(cameraRotation.y);
+                          
+                const zB = b.z * Math.cos(cameraRotation.x) * Math.cos(cameraRotation.y) + 
+                          b.y * Math.sin(cameraRotation.x) +
+                          b.x * Math.sin(cameraRotation.y);
+                
+                return zA - zB;
+            });
+            
+            // Update and draw each box
+            for (let i = 0; i < boxes.length; i++) {
+                boxes[i].update();
+                boxes[i].draw();
+            }
+            
+            requestAnimationFrame(animate);
+        }
+
+        // Initialize
+        createBoxes();
+        animate();
+
+        // Event listeners
+        throwBoxesBtn.addEventListener("click", function() {
+            for (let i = 0; i < boxes.length; i++) {
+                boxes[i].vx = (Math.random() - 0.5) * 10;
+                boxes[i].vy = (Math.random() - 0.5) * 10;
+                boxes[i].vz = (Math.random() - 0.5) * 10;
+            }
+        });
+
+        changeColorBtn.addEventListener("click", function() {
+            colorIndex = (colorIndex + 1) % colors.length;
+            currentColor = colors[colorIndex];
+            for (let i = 0; i < boxes.length; i++) {
+                boxes[i].color = currentColor;
+            }
+        });
+
+        gravitySlider.addEventListener("input", function() {
+            gravity = parseInt(this.value) / 10;
+            gravityValue.textContent = this.value;
+        });
+
+        boxesSlider.addEventListener("input", function() {
+            boxesValue.textContent = this.value;
+        });
+
+        boxesSlider.addEventListener("change", function() {
+            boxesCount = parseInt(this.value);
+            createBoxes();
+        });
+
+        // Camera rotation with mouse drag
+        containerEl.addEventListener('mousedown', function(e) {
+            dragEnabled = true;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+        });
+
+        containerEl.addEventListener('mousemove', function(e) {
+            if (dragEnabled) {
+                const deltaX = e.clientX - dragStartX;
+                const deltaY = e.clientY - dragStartY;
+                
+                cameraRotation.y += deltaX * 0.01;
+                cameraRotation.x += deltaY * 0.01;
+                
+                // Limit vertical rotation to avoid flipping
+                cameraRotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, cameraRotation.x));
+                
+                dragStartX = e.clientX;
+                dragStartY = e.clientY;
+            }
+        });
+
+        containerEl.addEventListener('mouseup', function() {
+            dragEnabled = false;
+        });
+
+        containerEl.addEventListener('mouseleave', function() {
+            dragEnabled = false;
+        });
+
+        // Double click to throw boxes
+        containerEl.addEventListener('dblclick', function() {
+            for (let i = 0; i < boxes.length; i++) {
+                boxes[i].vx = (Math.random() - 0.5) * 10;
+                boxes[i].vy = (Math.random() - 0.5) * 10;
+                boxes[i].vz = (Math.random() - 0.5) * 10;
+            }
+        });
+    </script>
+</body>
+</html>

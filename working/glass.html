@@ -1,0 +1,365 @@
+<!-- 
+Big thanks to 
+
+Kelly Milligan for awesome article about the new MeshPhysicalMaterial features
+https://tympanus.net/codrops/2021/10/27/creating-the-effect-of-transparent-glass-and-plastic-in-three-js/
+
+and @quentinver for the background pattern
+https://codepen.io/quentinver/pen/KBKQbd
+
+-->
+
+<div class="container">
+</div>
+<style>
+body {
+overflow: hidden;
+    padding: 0;
+    margin: 0;
+}
+
+canvas {
+    display: block;
+    position: fixed;
+    right: 0;
+}
+
+.container {
+    display: flex;
+    height: 100vh;
+    width: 100%;
+    justify-content: center;
+    align-content: center;
+}
+
+.lil-gui {
+    --width: 450px;
+    /*max-width: 90%;*/
+    --widget-height: 20px;
+    font-size: 15px;
+    --input-font-size: 15px;
+    --padding: 10px;
+    --spacing: 10px;
+    --slider-knob-width: 5px;
+    --background-color: rgba(5, 0, 15, .8);
+    --widget-color: rgba(255, 255, 255, .3);
+    --focus-color: rgba(255, 255, 255, .4);
+    --hover-color: rgba(255, 255, 255, .5);
+
+    --font-family: monospace;
+}
+
+
+
+</style>
+<script type = "module">
+
+
+import * as THREE from "https://cdn.skypack.dev/three@0.133.1/build/three.module";
+import {OrbitControls} from "https://cdn.skypack.dev/three@0.133.1/examples/jsm/controls/OrbitControls";
+import {GUI} from "https://cdn.skypack.dev/lil-gui@0.16.1";
+
+const container = document.querySelector(".container");
+
+
+const config = {
+    cameraDist: 23,
+    backDist: 5,
+
+    // glass geometry parameters (to customizable)
+    tRadius: 3.65,
+    bRadius: 2.5,
+    tEdge: 1.5,
+    bEdge: .5,
+    thickness: .3,
+    faceNumber: 12,
+
+    // other glass geometry parameters
+    height: 10.5,
+    bottomExtraThickness: 3,
+    segmentsNumber: 60,
+    glassPosition: .5,
+
+    // material parameters (all to customizable)
+    metalness: .02,
+    roughness: .1,
+    transmission: .8,
+    materialThickness: 1,
+    opacity: .7,
+};
+
+
+let renderer, scene, camera, glassGroup, orbit, lightHolder;
+let materals = [];
+
+let backCanvas, backPlaneMesh, bottomPlaneMesh;
+let meshes;
+
+initScene();
+createControls();
+
+updateSize();
+
+window.addEventListener("resize", () => updateSize());
+render();
+
+function createControls() {
+    const gui = new GUI();
+	 gui.close();
+
+    let folder;
+
+    folder = gui.addFolder("SHAPE");
+    folder.add(config, "bRadius", 2.2, 3.5).step(.01).onChange(() => {
+        updateGeometry(meshes.outerFaces, getOuterFacedCylinder());
+        updateGeometry(meshes.innerSurface, getInnerSurface());
+        updateGeometry(meshes.bottom, getBottom());
+    }).name("bottom radius");
+    folder.add(config, "thickness", .01, .6).step(.01).onChange(() => {
+        updateGeometry(meshes.innerSurface, getInnerSurface());
+        updateGeometry(meshes.topRing, getTopRing());
+    });
+    folder.add(config, "tEdge", 0, 3).step(.01).onChange(() => {
+        updateGeometry(meshes.topCylinder, getOuterTopCylinder());
+        updateGeometry(meshes.outerFaces, getOuterFacedCylinder());
+    }).name("top edge");
+    folder.add(config, "bEdge", 0, 1).step(.01).onChange(() => {
+        updateGeometry(meshes.outerFaces, getOuterFacedCylinder());
+        updateGeometry(meshes.bottom, getBottom());
+    }).name("bottom edge");
+    folder.add(config, "faceNumber", 7, 20).step(1).onChange(() => {
+        updateGeometry(meshes.outerFaces, getOuterFacedCylinder());
+    }).name("number of faces");
+
+
+    folder = gui.addFolder("MATERIAL");
+    folder.add(config, "metalness", 0, .3).step(.01).onChange((v) => {
+        materals.forEach((m) => {
+            m.metalness = v;
+        });
+    });
+    folder.add(config, "roughness", 0, .5).step(.01).onChange((v) => {
+        materals.forEach((m) => {
+            m.roughness = v;
+        });
+    });
+    folder.add(config, "transmission", .5, 1).step(.01).onChange((v) => {
+        materals.forEach((m) => {
+            m.transmission = v;
+        });
+    });
+    folder.add(config, "materialThickness", 0, 5).step(.01).onChange((v) => {
+        materals.forEach((m) => {
+            m.thickness = v;
+        });
+    }).name("thickness");
+    folder.add(config, "opacity", .2, .9).step(.01).onChange((v) => {
+        materals.forEach((m) => {
+            m.opacity = v;
+        });
+    });
+}
+
+function initScene() {
+    renderer = new THREE.WebGLRenderer({
+        antialias: true
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    container.appendChild(renderer.domElement);
+
+    scene = new THREE.Scene();
+	 //scene.background = new THREE.Color(0xFFBEF2);
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 100);
+    camera.up.set(0, 1, .75);
+    camera.position.z = config.cameraDist;
+	
+
+    glassGroup = new THREE.Group();
+
+    orbit = new OrbitControls(camera, renderer.domElement);
+    orbit.enableZoom = false;
+    orbit.enablePan = false;
+    orbit.minPolarAngle = .25 * Math.PI;
+    orbit.maxPolarAngle = .75 * Math.PI;
+    orbit.enableDamping = true;
+    orbit.autoRotate = true;
+    orbit.autoRotateSpeed = .4;
+
+    setupScene();
+    createBackgroundMaterial();
+    createGlass();
+    render();
+}
+
+function setupScene() {
+    scene.background = new THREE.Color(0xffffff);
+
+    lightHolder = new THREE.Group();
+    scene.add(lightHolder);
+
+    const pointLightShadow = new THREE.PointLight(0xffffff, .3);
+    pointLightShadow.castShadow = true;
+    pointLightShadow.shadow.mapSize.width = 1500;
+    pointLightShadow.shadow.mapSize.height = 1500;
+    pointLightShadow.position.set(0, 40, 0);
+    lightHolder.add(pointLightShadow);
+
+    const pointLight = new THREE.PointLight(0xffffff, .9);
+    pointLight.position.set(10, 0, 10);
+    lightHolder.add(pointLight);
+
+    backCanvas = document.createElement("canvas");
+    const backPlaneSize = config.cameraDist + config.backDist;
+    const backPlaneGeometry = new THREE.PlaneBufferGeometry(backPlaneSize * 5, backPlaneSize);
+    backPlaneMesh = new THREE.Mesh(backPlaneGeometry, createBackgroundMaterial());
+    backPlaneMesh.position.z = -config.backDist;
+    lightHolder.add(backPlaneMesh);
+
+    const bottomPlaneGeometry = new THREE.PlaneBufferGeometry(100, 100);
+    bottomPlaneMesh = new THREE.Mesh(bottomPlaneGeometry, new THREE.ShadowMaterial({
+        opacity: .03
+    }));
+    bottomPlaneMesh.rotateX(-.5 * Math.PI);
+    bottomPlaneMesh.position.y = -9;
+    bottomPlaneMesh.receiveShadow = true;
+    lightHolder.add(bottomPlaneMesh);
+}
+
+function createBackgroundMaterial() {
+    const width = backCanvas.width = 3000 * 5;
+    const height = backCanvas.height = 3000;
+    const ctx = backCanvas.getContext("2d");
+
+    ctx.rect(0, 0, width, height);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+    ctx.fillStyle = "#000000";
+    const fontSize = .15 * height;
+    ctx.font = fontSize + "px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("Glass Configurator", .5 * width, .5 * height);
+    
+    return new THREE.MeshBasicMaterial({map: new THREE.CanvasTexture(backCanvas)});
+}
+
+function createGlass() {
+
+    const glassMaterial = new THREE.MeshPhysicalMaterial({
+        metalness: config.metalness,
+        roughness: config.roughness,
+        transmission: config.transmission,
+        thickness: config.materialThickness,
+        transparent: true,
+        emissive: new THREE.Color(0x0C1414),
+        opacity: config.opacity,
+    });
+    materals.push(glassMaterial);
+
+    const glassMaterialDSide = glassMaterial.clone();
+    glassMaterialDSide.side = THREE.DoubleSide;
+    materals.push(glassMaterialDSide);
+
+    const glassMaterialFlatDSide = glassMaterial.clone();
+    glassMaterialFlatDSide.flatShading = true;
+    glassMaterialFlatDSide.side = THREE.DoubleSide;
+    materals.push(glassMaterialFlatDSide);
+
+    const glassMaterialNoDepth = glassMaterial.clone();
+    glassMaterialNoDepth.depthTest = false;
+    materals.push(glassMaterialNoDepth);
+
+    meshes = {
+        outerFaces: new THREE.Mesh(getOuterFacedCylinder(), glassMaterialFlatDSide),
+        topCylinder: new THREE.Mesh(getOuterTopCylinder(), glassMaterialDSide),
+        bottom: new THREE.Mesh(getBottom(), glassMaterialDSide),
+        innerSurface: new THREE.Mesh(getInnerSurface(), glassMaterialNoDepth),
+        topRing: new THREE.Mesh(getTopRing(), glassMaterialDSide)
+    };
+
+    meshes.outerFaces.renderOrder = 2;
+    meshes.topCylinder.renderOrder = 2;
+    meshes.bottom.renderOrder = 2;
+
+    meshes.outerFaces.castShadow = true;
+    meshes.bottom.castShadow = true;
+
+    const keys = Object.keys(meshes);
+    keys.forEach((key) => {
+        glassGroup.add(meshes[key]);
+    });
+
+    scene.add(glassGroup);
+}
+
+function getOuterFacedCylinder() {
+    const points = [];
+    points.push(new THREE.Vector2(config.bRadius, config.bEdge));
+    points.push(new THREE.Vector2(config.tRadius, config.height - config.tEdge));
+    points.forEach(p => p.y -= .5 * config.height);
+
+    return new THREE.LatheGeometry(points, config.faceNumber);
+}
+
+function getBottom() {
+    const points = [];
+    points.push(new THREE.Vector2(0, 0));
+    points.push(new THREE.Vector2(config.bRadius - .9, 0));
+    points.push(new THREE.Vector2(config.bRadius - .4, .1));
+    points.push(new THREE.Vector2(config.bRadius - .3, 0));
+    points.push(new THREE.Vector2(config.bRadius, 0));
+    points.push(new THREE.Vector2(config.bRadius, config.bEdge));
+    points.push(new THREE.Vector2(.9 * config.bRadius, config.bEdge + config.bRadius * .05));
+    points.forEach(p => p.y -= (.5 * config.height));
+
+    return new THREE.LatheGeometry(points, config.segmentsNumber);
+}
+
+function getOuterTopCylinder() {
+    const overlay = .05;
+    const points = [];
+    points.push(new THREE.Vector2(config.tRadius * .9, config.height - config.tEdge - config.tRadius * .05));
+    points.push(new THREE.Vector2(config.tRadius, config.height - config.tEdge));
+    points.push(new THREE.Vector2(config.tRadius, config.height + overlay));
+    points.forEach(p => p.y -= (.5 * config.height + overlay));
+
+    return new THREE.LatheGeometry(points, config.segmentsNumber);
+}
+
+function getInnerSurface() {
+    const points = [];
+    points.push(new THREE.Vector2(config.tRadius - config.thickness, config.height));
+    points.push(new THREE.Vector2(config.bRadius - config.thickness, config.bottomExtraThickness * config.thickness));
+    points.push(new THREE.Vector2(0, config.bottomExtraThickness * config.thickness));
+    points.forEach(p => p.y -= .5 * config.height);
+
+    return new THREE.LatheGeometry(points, config.segmentsNumber);
+}
+
+function getTopRing() {
+    const geometry = new THREE.RingGeometry(config.tRadius, config.tRadius - config.thickness, config.segmentsNumber, 1);
+    geometry.translate(0, 0, -.5 * config.height);
+    geometry.rotateX(Math.PI / 2);
+    return geometry;
+}
+
+function updateGeometry(mesh, geometry) {
+    mesh.geometry.dispose();
+    mesh.geometry = geometry;
+}
+
+function render() {
+    orbit.update();
+    lightHolder.quaternion.copy(camera.quaternion);
+    renderer.render(scene, camera);
+    requestAnimationFrame(render);
+}
+
+function updateSize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+
+</script>

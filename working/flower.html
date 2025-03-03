@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flowers Pattern</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        canvas#flowers-pattern {
+            display: block;
+            width: 100%;
+        }
+
+        .lil-gui {
+            --width: 450px;
+            max-width: 90%;
+            --widget-height: 20px;
+            font-size: 15px;
+            --input-font-size: 15px;
+            --padding: 10px;
+            --spacing: 10px;
+            --slider-knob-width: 5px;
+            --background-color: rgba(5, 0, 15, .8);
+            --widget-color: rgba(255, 255, 255, .3);
+            --focus-color: rgba(255, 255, 255, .4);
+            --hover-color: rgba(255, 255, 255, .5);
+
+            --font-family: monospace;
+        }
+
+        .lil-gui.autoPlace {
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="flowers-pattern"></canvas>
+
+    <script type="x-shader/x-fragment" id="vertShader">
+        precision mediump float;
+
+        varying vec2 vUv;
+        attribute vec2 a_position;
+
+        void main() {
+            vUv = .5 * (a_position + 1.);
+            gl_Position = vec4(a_position, 0.0, 1.0);
+        }
+    </script>
+
+    <script type="x-shader/x-fragment" id="fragShader">
+        precision mediump float;
+
+        varying vec2 vUv;
+        uniform float u_scale;
+        uniform float u_time;
+        uniform float u_ratio;
+        uniform float u_petals_number;
+        uniform float u_flower_thickness;
+        uniform float u_def_floating;
+        uniform float u_visibility;
+        uniform float u_back_darkness;
+        uniform vec2 u_pointer;
+
+        #define TWO_PI 6.28318530718
+
+        float get_dot_shape(vec2 uv, vec2 center, float pwr) {
+            float pointer_shape = 1. - length(uv - center);
+            pointer_shape = clamp(pointer_shape, 0., 1.);
+            pointer_shape = pow(pointer_shape, pwr);
+            return pointer_shape;
+        }
+
+        // pseudo-random
+        float random(vec2 seed) {
+            return fract(sin(dot(seed, vec2(12.9898, 78.233))) * 43758.5453);
+        }
+        vec2 hash(vec2 p) {
+            p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+            return fract(sin(p)*18.5453);
+        }
+
+        // polynomial-based smooth minimum
+        float smin(float a, float b, float k) {
+            float h = clamp(.5 + .5 * (b - a) / k, 0., 1.);
+            return mix(b, a, h) - k * h * (1. - h);
+        }
+
+        vec3 get_flower_pattern(vec2 uv, float scale, float tile_time, float rotation_time, float pointer) {
+            vec2 _uv = uv * scale;
+
+            vec2 i_uv = floor(_uv);
+            vec2 f_uv = fract(_uv);
+
+            float randomizer = 1.;
+            vec3 d = vec3(1.);
+            float cell_angle = 0.;
+
+            for (int y = -1; y <= 1; y++) {
+                for (int x = -1; x <= 1; x++) {
+                    vec2 tile_offset = vec2(float(x), float(y));
+                    vec2 o = hash(i_uv + tile_offset);
+                    tile_offset += (.3 + .3 * sin(tile_time + TWO_PI * o)) - f_uv;
+
+                    float dist = dot(tile_offset, tile_offset);
+
+                    float old_min_dist = d.x;
+
+                    d.z = max(d.x, max(d.y, min(d.z, dist)));// 3rd
+                    d.y = max(d.x, min(d.y, dist));// 2nd
+                    d.x = min(d.x, dist);// Closest
+
+                    if (old_min_dist > d.x) {
+                        cell_angle = atan(tile_offset.x, tile_offset.y);
+                        randomizer = o.x;
+                    }
+                }
+            }
+            d = sqrt(d);
+            float voronoi_shape = min(smin(d.z, d.y, .1) - d.x, 1.);
+            voronoi_shape *= u_flower_thickness;
+            voronoi_shape = pow(voronoi_shape, .3);
+
+            cell_angle += randomizer * rotation_time;
+            cell_angle += .7 * pointer;
+            cell_angle = mod(cell_angle, TWO_PI);
+
+            float sectoral_shape = abs(sin(cell_angle * .5 * (u_petals_number + floor(randomizer * 2.))));
+            sectoral_shape = mix(1., sectoral_shape, pow(d.x, .4));
+            sectoral_shape *= voronoi_shape;
+
+            float drawing_border = .3;
+            float border_shape = smoothstep(drawing_border, drawing_border + .05, sectoral_shape) - smoothstep(drawing_border - .2, drawing_border, sectoral_shape);
+            sectoral_shape = smoothstep(drawing_border, drawing_border + .1, sectoral_shape);
+
+            float mid_shape = 1. - smoothstep(.05, .07, d.x - .03 * pointer);
+
+            float visibility = step(randomizer, u_visibility);
+            border_shape *= visibility;
+            sectoral_shape *= visibility;
+            mid_shape *= visibility;
+
+            vec3 color = vec3(.1, .1, .2) / (1. + u_back_darkness);
+            color = mix(color, vec3(.8, .82, .87), sectoral_shape);
+            color += mix(color, vec3(.8, .1, .1), border_shape);
+            color = mix(color, vec3(1., .2 + .5 * randomizer, .2), mid_shape);
+
+            return color;
+        }
+
+        void main() {
+            vec2 uv = vUv;
+            uv.x *= u_ratio;
+
+            vec2 point = u_pointer;
+            point.x *= u_ratio;
+
+            float pointer_shape = get_dot_shape(uv, point, 4.);
+            float tile_floating_speed = .0004 * u_time * u_def_floating;
+            float flower_rotation_speed = .0002 * u_time;
+            vec3 color = get_flower_pattern(uv, u_scale, tile_floating_speed, flower_rotation_speed, pointer_shape);
+
+            float opacity = 1.;
+            gl_FragColor = vec4(color, opacity);
+        }
+    </script>
+
+    <script type="module">
+        import GUI from 'https://cdn.jsdelivr.net/npm/lil-gui@0.18.2/+esm';
+
+        const canvasEl = document.querySelector("#flowers-pattern");
+
+        const mouseThreshold = .6;
+        const devicePixelRatio = Math.min(window.devicePixelRatio, 2);
+
+        const mouse = {
+            x: -.5 * window.innerWidth,
+            y: .5 * window.innerHeight,
+            tX: -.5 * window.innerWidth,
+            tY: .5 * window.innerHeight,
+        }
+
+        const params = {
+            scale: 7,
+            petalsNumber: 5,
+            flowerThickness: .4,
+            floatingSpeed: 1,
+            visibility: .75,
+            backDarkness: .2,
+        }
+
+        let uniforms;
+        const gl = initShader();
+        createControls();
+
+        render();
+        window.addEventListener("resize", resizeCanvas);
+        resizeCanvas();
+
+        window.addEventListener("mousemove", e => {
+            updateMousePosition(e.pageX, e.pageY);
+        });
+        window.addEventListener("touchmove", e => {
+            updateMousePosition(e.targetTouches[0].pageX, e.targetTouches[0].pageY);
+        });
+        canvasEl.addEventListener("click", e => {
+            updateMousePosition(e.pageX, e.pageY);
+        });
+
+        function updateMousePosition(eX, eY) {
+            mouse.tX = eX;
+            mouse.tY = eY;
+        }
+
+        function initShader() {
+            const vsSource = document.getElementById("vertShader").innerHTML;
+            const fsSource = document.getElementById("fragShader").innerHTML;
+
+            const gl = canvasEl.getContext("webgl") || canvasEl.getContext("experimental-webgl");
+
+            if (!gl) {
+                alert("WebGL is not supported by your browser.");
+            }
+
+            function createShader(gl, sourceCode, type) {
+                const shader = gl.createShader(type);
+                gl.shaderSource(shader, sourceCode);
+                gl.compileShader(shader);
+
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    console.error("An error occurred compiling the shaders: " + gl.getShaderInfoLog(shader));
+                    gl.deleteShader(shader);
+                    return null;
+                }
+
+                return shader;
+            }
+
+            const vertexShader = createShader(gl, vsSource, gl.VERTEX_SHADER);
+            const fragmentShader = createShader(gl, fsSource, gl.FRAGMENT_SHADER);
+
+            function createShaderProgram(gl, vertexShader, fragmentShader) {
+                const program = gl.createProgram();
+                gl.attachShader(program, vertexShader);
+                gl.attachShader(program, fragmentShader);
+                gl.linkProgram(program);
+
+                if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                    console.error("Unable to initialize the shader program: " + gl.getProgramInfoLog(program));
+                    return null;
+                }
+
+                return program;
+            }
+
+            const shaderProgram = createShaderProgram(gl, vertexShader, fragmentShader);
+            uniforms = getUniforms(shaderProgram);
+
+            function getUniforms(program) {
+                let uniforms = [];
+                let uniformCount = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
+                for (let i = 0; i < uniformCount; i++) {
+                    let uniformName = gl.getActiveUniform(program, i).name;
+                    uniforms[uniformName] = gl.getUniformLocation(program, uniformName);
+                }
+                return uniforms;
+            }
+
+            const vertices = new Float32Array([-1., -1., 1., -1., -1., 1., 1., 1.]);
+
+            const vertexBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+            gl.useProgram(shaderProgram);
+
+            const positionLocation = gl.getAttribLocation(shaderProgram, "a_position");
+            gl.enableVertexAttribArray(positionLocation);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+            gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+            gl.uniform1f(uniforms.u_scale, params.scale);
+            gl.uniform1f(uniforms.u_petals_number, params.petalsNumber);
+            gl.uniform1f(uniforms.u_flower_thickness, params.flowerThickness);
+            gl.uniform1f(uniforms.u_def_floating, params.floatingSpeed);
+            gl.uniform1f(uniforms.u_visibility, params.visibility);
+            gl.uniform1f(uniforms.u_back_darkness, params.backDarkness);
+
+            return gl;
+        }
+
+        function render() {
+            const currentTime = performance.now();
+
+            gl.uniform1f(uniforms.u_time, currentTime);
+
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+            mouse.x += (mouse.tX - mouse.x) * mouseThreshold;
+            mouse.y += (mouse.tY - mouse.y) * mouseThreshold;
+
+            gl.uniform2f(uniforms.u_pointer, mouse.x / window.innerWidth, 1. - mouse.y / window.innerHeight);
+            requestAnimationFrame(render);
+        }
+
+        function resizeCanvas() {
+            canvasEl.width = window.innerWidth * devicePixelRatio;
+            canvasEl.height = window.innerHeight * devicePixelRatio;
+            gl.viewport(0, 0, canvasEl.width, canvasEl.height);
+            gl.uniform1f(uniforms.u_ratio, canvasEl.width / canvasEl.height);
+        }
+
+        function createControls() {
+            const gui = new GUI();
+            gui.add(params, "scale", 5, 15, .01)
+                .name("scale")
+                .onChange(v => {
+                    gl.uniform1f(uniforms.u_scale, v);
+                });
+            gui.add(params, "petalsNumber", 4, 8, 1)
+                .name("petals number")
+                .onChange(v => {
+                    gl.uniform1f(uniforms.u_petals_number, v);
+                });
+            gui.add(params, "flowerThickness", .2, .8)
+                .name("flower thickness")
+                .onChange(v => {
+                    gl.uniform1f(uniforms.u_flower_thickness, v);
+                });
+            gui.add(params, "floatingSpeed", .5, 3, .5)
+                .name("floating speed")
+                .onChange(v => {
+                    gl.uniform1f(uniforms.u_def_floating, v);
+                });
+            gui.add(params, "visibility", .1, 1, .01)
+                .onChange(v => {
+                    gl.uniform1f(uniforms.u_visibility, v);
+                });
+            gui.add(params, "backDarkness", 0, 1, .01)
+                .name("background darkness")
+                .onChange(v => {
+                    gl.uniform1f(uniforms.u_back_darkness, v);
+                });
+        }
+    </script>
+</body>
+</html>

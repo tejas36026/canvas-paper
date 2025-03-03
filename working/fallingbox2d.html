@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Physics Animation - Bouncing Boxes</title>
+    <style>
+        html, body {
+            padding: 0;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            cursor: grab;
+        }
+
+        .container:active {
+            cursor: grabbing;
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 100;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: Arial, sans-serif;
+        }
+
+        button {
+            margin: 5px;
+            padding: 8px 12px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .slider-container {
+            margin: 10px 0;
+        }
+
+        .slider-container label {
+            display: inline-block;
+            width: 120px;
+            margin-right: 10px;
+        }
+
+        canvas {
+            background-color: #f5f5f5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <canvas id="canvas"></canvas>
+        <div class="controls">
+            <button id="throwBoxes">Throw Boxes</button>
+            <button id="changeColor">Change Color</button>
+            <div class="slider-container">
+                <label for="gravitySlider">Gravity: </label>
+                <input type="range" id="gravitySlider" min="1" max="20" value="10">
+                <span id="gravityValue">10</span>
+            </div>
+            <div class="slider-container">
+                <label for="boxesSlider">Number of Boxes: </label>
+                <input type="range" id="boxesSlider" min="10" max="100" value="50">
+                <span id="boxesValue">50</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const containerEl = document.querySelector(".container");
+        const throwBoxesBtn = document.getElementById("throwBoxes");
+        const changeColorBtn = document.getElementById("changeColor");
+        const gravitySlider = document.getElementById("gravitySlider");
+        const gravityValue = document.getElementById("gravityValue");
+        const boxesSlider = document.getElementById("boxesSlider");
+        const boxesValue = document.getElementById("boxesValue");
+
+        // Set canvas dimensions
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Box properties
+        let boxSize = 30;
+        let colorIndex = 0;
+        const colors = [
+            '#000000', '#3498db', '#e74c3c', '#2ecc71', '#f39c12', 
+            '#9b59b6', '#1abc9c', '#d35400', '#2c3e50', '#27ae60'
+        ];
+        let currentColor = colors[colorIndex];
+
+        // Physics parameters
+        let gravity = parseInt(gravitySlider.value) / 10;
+        let boxesCount = parseInt(boxesSlider.value);
+        let dragEnabled = false;
+        let dragStartX, dragStartY;
+        let cameraRotation = { x: 0, y: 0 };
+
+        // Create boxes array
+        let boxes = [];
+
+        // Box class definition
+        class Box {
+            constructor() {
+                this.size = boxSize;
+                this.x = Math.random() * (canvas.width - this.size);
+                this.y = Math.random() * (canvas.height - this.size);
+                this.z = Math.random() * 500; // Depth for 3D effect
+                this.vx = (Math.random() - 0.5) * 20;
+                this.vy = (Math.random() - 0.5) * 20;
+                this.vz = (Math.random() - 0.5) * 20;
+                this.color = currentColor;
+                this.angle = { x: Math.random() * Math.PI * 2, y: Math.random() * Math.PI * 2, z: Math.random() * Math.PI * 2 };
+                this.angularVelocity = { 
+                    x: (Math.random() - 0.5) / 10, 
+                    y: (Math.random() - 0.5) / 10, 
+                    z: (Math.random() - 0.5) / 10 
+                };
+            }
+
+            update() {
+                // Apply gravity
+                this.vy += gravity;
+                
+                // Update position
+                this.x += this.vx;
+                this.y += this.vy;
+                this.z += this.vz;
+                
+                // Update rotation
+                this.angle.x += this.angularVelocity.x;
+                this.angle.y += this.angularVelocity.y;
+                this.angle.z += this.angularVelocity.z;
+                
+                // Boundary collision detection (with bounce)
+                if (this.x < 0 || this.x > canvas.width - this.size) {
+                    this.vx *= -0.8;
+                    this.x = this.x < 0 ? 0 : canvas.width - this.size;
+                }
+                
+                if (this.y < 0 || this.y > canvas.height - this.size) {
+                    this.vy *= -0.8;
+                    this.y = this.y < 0 ? 0 : canvas.height - this.size;
+                }
+                
+                if (this.z < 0 || this.z > 1000) {
+                    this.vz *= -0.8;
+                    this.z = this.z < 0 ? 0 : 1000;
+                }
+                
+                // Apply drag/friction
+                this.vx *= 0.99;
+                this.vy *= 0.99;
+                this.vz *= 0.99;
+            }
+
+            draw() {
+                // Calculate size based on z-position (perspective)
+                const perspective = 800;
+                const scale = perspective / (perspective + this.z);
+                const size = this.size * scale;
+                
+                // Calculate position after rotation and perspective
+                const centerX = this.x + this.size / 2;
+                const centerY = this.y + this.size / 2;
+                
+                // Draw box
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.scale(scale, scale);
+                ctx.rotate(this.angle.z);
+                
+                // Apply 3D-like rendering with shading based on rotation
+                const shade = Math.abs(Math.sin(this.angle.x) * 0.5) + 0.5;
+                const r = parseInt(this.color.substr(1, 2), 16);
+                const g = parseInt(this.color.substr(3, 2), 16);
+                const b = parseInt(this.color.substr(5, 2), 16);
+                const shadedColor = `rgb(${Math.floor(r * shade)}, ${Math.floor(g * shade)}, ${Math.floor(b * shade)})`;
+                
+                ctx.fillStyle = shadedColor;
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 2;
+                
+                // Draw box with some 3D effect
+                ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size);
+                ctx.strokeRect(-this.size / 2, -this.size / 2, this.size, this.size);
+                
+                // Add shading edge
+                const edgeShade = Math.abs(Math.cos(this.angle.y) * 0.3);
+                ctx.fillStyle = `rgba(0, 0, 0, ${edgeShade})`;
+                ctx.fillRect(-this.size / 2, -this.size / 2, this.size / 6, this.size);
+                ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size / 6);
+                
+                ctx.restore();
+            }
+        }
+
+        // Create initial boxes
+        function createBoxes() {
+            boxes = [];
+            for (let i = 0; i < boxesCount; i++) {
+                boxes.push(new Box());
+            }
+        }
+
+        // Main animation loop
+        function animate() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Sort boxes by z-index for correct rendering order
+            boxes.sort((a, b) => b.z - a.z);
+            
+            // Update and draw each box
+            for (let i = 0; i < boxes.length; i++) {
+                boxes[i].update();
+                boxes[i].draw();
+            }
+            
+            requestAnimationFrame(animate);
+        }
+
+        // Initialize
+        createBoxes();
+        animate();
+
+        // Event listeners
+        throwBoxesBtn.addEventListener("click", function() {
+            for (let i = 0; i < boxes.length; i++) {
+                boxes[i].vx = (Math.random() - 0.5) * 20;
+                boxes[i].vy = (Math.random() - 0.5) * 20;
+                boxes[i].vz = (Math.random() - 0.5) * 20;
+            }
+        });
+
+        changeColorBtn.addEventListener("click", function() {
+            colorIndex = (colorIndex + 1) % colors.length;
+            currentColor = colors[colorIndex];
+            for (let i = 0; i < boxes.length; i++) {
+                boxes[i].color = currentColor;
+            }
+        });
+
+        gravitySlider.addEventListener("input", function() {
+            gravity = parseInt(this.value) / 10;
+            gravityValue.textContent = this.value;
+        });
+
+        boxesSlider.addEventListener("input", function() {
+            boxesValue.textContent = this.value;
+        });
+
+        boxesSlider.addEventListener("change", function() {
+            boxesCount = parseInt(this.value);
+            createBoxes();
+        });
+
+        // Camera rotation with mouse drag
+        containerEl.addEventListener('mousedown', function(e) {
+            dragEnabled = true;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+        });
+
+        containerEl.addEventListener('mousemove', function(e) {
+            if (dragEnabled) {
+                const deltaX = e.clientX - dragStartX;
+                const deltaY = e.clientY - dragStartY;
+                
+                cameraRotation.y += deltaX * 0.01;
+                cameraRotation.x += deltaY * 0.01;
+                
+                dragStartX = e.clientX;
+                dragStartY = e.clientY;
+                
+                // Apply camera rotation to gravity
+                const angle = cameraRotation.y;
+                gravity = Math.cos(angle) * parseInt(gravitySlider.value) / 10;
+            }
+        });
+
+        containerEl.addEventListener('mouseup', function() {
+            dragEnabled = false;
+        });
+
+        containerEl.addEventListener('mouseleave', function() {
+            dragEnabled = false;
+        });
+
+        // Double click to throw boxes
+        containerEl.addEventListener('dblclick', function() {
+            for (let i = 0; i < boxes.length; i++) {
+                boxes[i].vx = (Math.random() - 0.5) * 20;
+                boxes[i].vy = (Math.random() - 0.5) * 20;
+                boxes[i].vz = (Math.random() - 0.5) * 20;
+            }
+        });
+    </script>
+</body>
+</html>

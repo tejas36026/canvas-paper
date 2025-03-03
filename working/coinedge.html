@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coin Animation</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css?family=Varela+Round&display=swap');
+
+        body {
+            font-family: 'Varela Round', sans-serif;
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            background-color: #f0f0f0;
+            margin: 0;
+        }
+
+        svg {
+            width: 250px;
+        }
+    </style>
+</head>
+<body>
+    <svg viewBox="1000 3600 700 550">
+        <defs>
+            <clipPath id="coin-edge-clip">
+                <ellipse class="coin-reverse" cx="1248" cy="3871" rx="63" ry="63"/>
+                <rect class="coin-edge" x="1184" y="3871" width="127" height="0"/>
+            </clipPath>
+        </defs>
+
+        <text fill="#555" font-size="167" x="1068" y="3930" font-weight="600">COIN.</text>
+
+        <g class="coin-body" opacity="1">
+            <g clip-path="url(#coin-edge-clip)">
+                <rect fill="#555" x="1185" y="3863" width="127" height="100"/>
+                <g opacity="0.6" fill="#eee">
+                    <rect x="1185" y="3863" width="3" height="100"/>
+                    <rect x="1190" y="3863" width="3" height="100"/>
+                    <rect x="1200" y="3863" width="3" height="100"/>
+                    <rect x="1215" y="3863" width="3" height="100"/>
+                    <rect x="1295" y="3863" width="3" height="100"/>
+                    <rect x="1303" y="3863" width="3" height="100"/>
+                </g>
+            </g>
+            <ellipse class="coin-obverse" fill="#555" stroke="#eee" stroke-width="2" cx="1248" cy="3871" rx="62" ry="63"/>
+        </g>
+    </svg>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/CustomEase.min.js"></script>
+    <script>
+        gsap.registerPlugin(CustomEase);
+        const coinBody = document.querySelector('.coin-body');
+        const coinEdge = document.querySelector('.coin-edge');
+        const coinObserve = document.querySelector('.coin-obverse');
+        const coinReverse = document.querySelector('.coin-reverse');
+
+        const coinTl = gsap.timeline({
+            repeat: -1,
+            repeatRefresh: true,
+        });
+
+        // Coin falling
+        coinTl.fromTo(coinBody, {
+            y: 0
+        }, {
+            duration: 1.2,
+            y: 200,
+            ease: CustomEase.create('custom', 'M0,0,C0.272,0.096,0.354,0.963,0.362,1,0.37,0.985,0.45,0.686,0.532,0.696,0.622,0.707,0.679,0.981,0.686,0.998,0.704,0.884,0.766,0.87,0.79,0.87,0.838,0.87,0.856,0.985,0.87,0.998,0.881,0.994,0.908,0.938,0.936,0.938,0.972,0.938,1,1,1,1')
+        }, 0)
+        // Coin random rotation
+        .fromTo(coinBody, {
+            rotation: 0
+        }, {
+            duration: 0.12,
+            rotation: 'random(-4, 4)'
+        }, 0.12)
+        .to(coinBody, {
+            duration: 0.96,
+            rotation: 0,
+            ease: 'elastic.in(1, 1)'
+        }, 0.24)
+        // Coin flip
+        .fromTo([coinObserve, coinReverse], {
+            attr: { 'ry' : 63 }
+        }, {
+            duration: 0.84,
+            attr: { 'ry' : 4 }
+        }, 0.36)
+        .fromTo(coinReverse, {
+            attr: { 'cy' : 3871 }
+        }, {
+            duration: 0.84,
+            attr: { 'cy' : 3891 }
+        }, 0.36)
+        .fromTo(coinEdge, {
+            attr: { 'height' : 0 }
+        }, {
+            duration: 0.84,
+            attr: { 'height' : 20 },
+        }, 0.36)
+        // Hide coin
+        .fromTo(coinBody, {
+            opacity: 1
+        }, {
+            duration: 0.5,
+            opacity: 0
+        }, 2.2);
+    </script>
+</body>
+</html>
