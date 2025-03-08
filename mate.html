@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Terrain Visualization with Canvas</title>
+    <style>
+        html, body {
+            padding: 0;
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            overflow: hidden;
+        }
+
+        .container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        .controls-panel {
+            position: fixed;
+            right: 20px;
+            top: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            padding: 15px;
+            border-radius: 8px;
+            width: 250px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 100;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 16px;
+            color: #4fc3f7;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .control-label {
+            flex: 1;
+            font-size: 14px;
+        }
+
+        .control-value {
+            width: 50px;
+            text-align: center;
+            font-size: 12px;
+        }
+
+        input[type="range"] {
+            flex: 2;
+            margin: 0 10px;
+        }
+
+        input[type="color"] {
+            width: 30px;
+            height: 30px;
+            border: none;
+            border-radius: 4px;
+            background: none;
+        }
+
+        button {
+            background-color: #4fc3f7;
+            color: #121212;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 5px;
+            transition: all 0.2s ease;
+        }
+
+        button:hover {
+            background-color: #81d4fa;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 10px;
+        }
+
+        #export-btn {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background-color: #4fc3f7;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <canvas id="terrain-canvas"></canvas>
+    </div>
+
+    <button id="export-btn">Export as PNG</button>
+
+    <div class="controls-panel">
+        <div class="control-group">
+            <h3>Terrain Settings</h3>
+            <div class="control-row">
+                <span class="control-label">Height</span>
+                <input type="range" id="amplitude" min="0" max="100" value="40">
+                <span class="control-value" id="amplitude-value">40</span>
+            </div>
+            <div class="control-row">
+                <span class="control-label">Scale</span>
+                <input type="range" id="scale" min="10" max="200" value="50">
+                <span class="control-value" id="scale-value">50</span>
+            </div>
+            <div class="control-row">
+                <span class="control-label">Detail</span>
+                <input type="range" id="detail" min="1" max="8" value="3">
+                <span class="control-value" id="detail-value">3</span>
+            </div>
+            <div class="control-row">
+                <span class="control-label">Resolution</span>
+                <input type="range" id="resolution" min="5" max="50" value="20">
+                <span class="control-value" id="resolution-value">20</span>
+            </div>
+            <button id="randomize-btn">Randomize Terrain</button>
+        </div>
+
+        <div class="control-group">
+            <h3>Camera</h3>
+            <div class="control-row">
+                <span class="control-label">Rotation X</span>
+                <input type="range" id="rotationX" min="-45" max="45" value="30">
+                <span class="control-value" id="rotationX-value">30</span>
+            </div>
+            <div class="control-row">
+                <span class="control-label">Rotation Y</span>
+                <input type="range" id="rotationY" min="-180" max="180" value="30">
+                <span class="control-value" id="rotationY-value">30</span>
+            </div>
+            <div class="control-row">
+                <span class="control-label">Distance</span>
+                <input type="range" id="distance" min="100" max="1000" value="400">
+                <span class="control-value" id="distance-value">400</span>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Animation</h3>
+            <div class="control-row">
+                <span class="control-label">Auto Rotate</span>
+                <input type="checkbox" id="autoRotate" checked>
+            </div>
+            <div class="control-row">
+                <span class="control-label">Speed</span>
+                <input type="range" id="speed" min="1" max="100" value="30">
+                <span class="control-value" id="speed-value">30</span>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Appearance</h3>
+            <div class="control-row">
+                <span class="control-label">Wireframe</span>
+                <input type="checkbox" id="wireframe" checked>
+            </div>
+            <div class="control-row">
+                <span class="control-label">Fill</span>
+                <input type="checkbox" id="fill" checked>
+            </div>
+            <div class="control-row">
+                <span class="control-label">Height Color</span>
+                <input type="checkbox" id="heightColor" checked>
+            </div>
+            <div class="control-row">
+                <span class="control-label">Base Color</span>
+                <input type="color" id="color" value="#4fc3f7">
+            </div>
+            <div class="control-row">
+                <span class="control-label">Background</span>
+                <input type="color" id="backgroundColor" value="#121212">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('terrain-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Parameters
+        let params = {
+            amplitude: 40,
+            scale: 50,
+            detail: 3,
+            resolution: 20,
+            rotationX: 30,
+            rotationY: 30,
+            distance: 400,
+            autoRotate: true,
+            speed: 30,
+            wireframe: true,
+            fill: true,
+            heightColor: true,
+            color: '#4fc3f7',
+            backgroundColor: '#121212'
+        };
+
+        // UI elements binding
+        const amplitudeSlider = document.getElementById('amplitude');
+        const amplitudeValue = document.getElementById('amplitude-value');
+        const scaleSlider = document.getElementById('scale');
+        const scaleValue = document.getElementById('scale-value');
+        const detailSlider = document.getElementById('detail');
+        const detailValue = document.getElementById('detail-value');
+        const resolutionSlider = document.getElementById('resolution');
+        const resolutionValue = document.getElementById('resolution-value');
+        const rotationXSlider = document.getElementById('rotationX');
+        const rotationXValue = document.getElementById('rotationX-value');
+        const rotationYSlider = document.getElementById('rotationY');
+        const rotationYValue = document.getElementById('rotationY-value');
+        const distanceSlider = document.getElementById('distance');
+        const distanceValue = document.getElementById('distance-value');
+        const autoRotateCheckbox = document.getElementById('autoRotate');
+        const speedSlider = document.getElementById('speed');
+        const speedValue = document.getElementById('speed-value');
+        const wireframeCheckbox = document.getElementById('wireframe');
+        const fillCheckbox = document.getElementById('fill');
+        const heightColorCheckbox = document.getElementById('heightColor');
+        const colorPicker = document.getElementById('color');
+        const backgroundColorPicker = document.getElementById('backgroundColor');
+        const randomizeBtn = document.getElementById('randomize-btn');
+        const exportBtn = document.getElementById('export-btn');
+
+        // Bind events
+        amplitudeSlider.addEventListener('input', () => {
+            params.amplitude = parseInt(amplitudeSlider.value);
+            amplitudeValue.textContent = params.amplitude;
+            generateTerrainMesh();
+        });
+
+        scaleSlider.addEventListener('input', () => {
+            params.scale = parseInt(scaleSlider.value);
+            scaleValue.textContent = params.scale;
+            generateTerrainMesh();
+        });
+
+        detailSlider.addEventListener('input', () => {
+            params.detail = parseInt(detailSlider.value);
+            detailValue.textContent = params.detail;
+            generateTerrainMesh();
+        });
+
+        resolutionSlider.addEventListener('input', () => {
+            params.resolution = parseInt(resolutionSlider.value);
+            resolutionValue.textContent = params.resolution;
+            generateTerrainMesh();
+        });
+
+        rotationXSlider.addEventListener('input', () => {
+            params.rotationX = parseInt(rotationXSlider.value);
+            rotationXValue.textContent = params.rotationX;
+        });
+
+        rotationYSlider.addEventListener('input', () => {
+            params.rotationY = parseInt(rotationYSlider.value);
+            rotationYValue.textContent = params.rotationY;
+        });
+
+        distanceSlider.addEventListener('input', () => {
+            params.distance = parseInt(distanceSlider.value);
+            distanceValue.textContent = params.distance;
+        });
+
+        autoRotateCheckbox.addEventListener('change', () => {
+            params.autoRotate = autoRotateCheckbox.checked;
+        });
+
+        speedSlider.addEventListener('input', () => {
+            params.speed = parseInt(speedSlider.value);
+            speedValue.textContent = params.speed;
+        });
+
+        wireframeCheckbox.addEventListener('change', () => {
+            params.wireframe = wireframeCheckbox.checked;
+        });
+
+        fillCheckbox.addEventListener('change', () => {
+            params.fill = fillCheckbox.checked;
+        });
+
+        heightColorCheckbox.addEventListener('change', () => {
+            params.heightColor = heightColorCheckbox.checked;
+        });
+
+        colorPicker.addEventListener('input', () => {
+            params.color = colorPicker.value;
+        });
+
+        backgroundColorPicker.addEventListener('input', () => {
+            params.backgroundColor = backgroundColorPicker.value;
+            document.body.style.backgroundColor = params.backgroundColor;
+        });
+
+        randomizeBtn.addEventListener('click', randomizeTerrain);
+        exportBtn.addEventListener('click', exportAsPNG);
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        // 3D Matrix and Vector functions
+        const Matrix = {
+            rotationX: function(angle) {
+                const rad = angle * Math.PI / 180;
+                const cos = Math.cos(rad);
+                const sin = Math.sin(rad);
+                return [
+                    [1, 0, 0],
+                    [0, cos, -sin],
+                    [0, sin, cos]
+                ];
+            },
+            rotationY: function(angle) {
+                const rad = angle * Math.PI / 180;
+                const cos = Math.cos(rad);
+                const sin = Math.sin(rad);
+                return [
+                    [cos, 0, sin],
+                    [0, 1, 0],
+                    [-sin, 0, cos]
+                ];
+            },
+            multiplyVector: function(matrix, vector) {
+                return [
+                    matrix[0][0] * vector[0] + matrix[0][1] * vector[1] + matrix[0][2] * vector[2],
+                    matrix[1][0] * vector[0] + matrix[1][1] * vector[1] + matrix[1][2] * vector[2],
+                    matrix[2][0] * vector[0] + matrix[2][1] * vector[1] + matrix[2][2] * vector[2]
+                ];
+            }
+        };
+
+        // Perlin Noise implementation
+        class PerlinNoise {
+            constructor() {
+                this.permutation = [];
+                for (let i = 0; i < 256; i++) {
+                    this.permutation[i] = Math.floor(Math.random() * 256);
+                }
+                this.permutation = this.permutation.concat(this.permutation);
+            }
+
+            fade(t) {
+                return t * t * t * (t * (t * 6 - 15) + 10);
+            }
+
+            lerp(t, a, b) {
+                return a + t * (b - a);
+            }
+
+            grad(hash, x, y, z) {
+                const h = hash & 15;
+                const u = h < 8 ? x : y;
+                const v = h < 4 ? y : h === 12 || h === 14 ? x : z;
+                return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
+            }
+
+            noise(x, y, z = 0) {
+                const X = Math.floor(x) & 255;
+                const Y = Math.floor(y) & 255;
+                const Z = Math.floor(z) & 255;
+
+                x -= Math.floor(x);
+                y -= Math.floor(y);
+                z -= Math.floor(z);
+
+                const u = this.fade(x);
+                const v = this.fade(y);
+                const w = this.fade(z);
+
+                const A = this.permutation[X] + Y;
+                const AA = this.permutation[A] + Z;
+                const AB = this.permutation[A + 1] + Z;
+                const B = this.permutation[X + 1] + Y;
+                const BA = this.permutation[B] + Z;
+                const BB = this.permutation[B + 1] + Z;
+
+                return this.lerp(w, 
+                    this.lerp(v, 
+                        this.lerp(u, 
+                            this.grad(this.permutation[AA], x, y, z),
+                            this.grad(this.permutation[BA], x - 1, y, z)
+                        ),
+                        this.lerp(u, 
+                            this.grad(this.permutation[AB], x, y - 1, z),
+                            this.grad(this.permutation[BB], x - 1, y - 1, z)
+                        )
+                    ),
+                    this.lerp(v, 
+                        this.lerp(u, 
+                            this.grad(this.permutation[AA + 1], x, y, z - 1),
+                            this.grad(this.permutation[BA + 1], x - 1, y, z - 1)
+                        ),
+                        this.lerp(u, 
+                            this.grad(this.permutation[AB + 1], x, y - 1, z - 1),
+                            this.grad(this.permutation[BB + 1], x - 1, y - 1, z - 1)
+                        )
+                    )
+                );
+            }
+        }
+
+        const perlin = new PerlinNoise();
+        let time = 0;
+
+        // 3D terrain mesh structure
+        let terrain = {
+            vertices: [],
+            faces: [],
+            colors: []
+        };
+
+        function generateTerrainMesh() {
+            const res = params.resolution;
+            const size = 500;
+            const halfSize = size / 2;
+            
+            // Create vertices
+            const vertices = [];
+            const colors = [];
+            
+            for (let z = 0; z < res; z++) {
+                for (let x = 0; x < res; x++) {
+                    // Normalize coordinates to [-0.5, 0.5] range
+                    const nx = x / (res - 1) - 0.5;
+                    const nz = z / (res - 1) - 0.5;
+                    
+                    // Calculate vertex position
+                    let y = 0;
+                    let frequency = 1.0 / params.scale;
+                    let amplitude = params.amplitude;
+                    
+                    for (let j = 0; j < params.detail; j++) {
+                        const sampleX = x * frequency;
+                        const sampleZ = z * frequency;
+                        
+                        y += amplitude * perlin.noise(sampleX, sampleZ, 0);
+                        
+                        frequency *= 2;
+                        amplitude *= 0.5;
+                    }
+                    
+                    // Scale to terrain size
+                    const vx = nx * size;
+                    const vy = y;
+                    const vz = nz * size;
+                    
+                    vertices.push([vx, vy, vz]);
+                    
+                    // Calculate color based on height
+                    if (params.heightColor) {
+                        // Normalize height to [0, 1] range for coloring
+                        const normalizedHeight = (y + params.amplitude) / (params.amplitude * 2);
+                        
+                        // Parse base color
+                        const baseColor = params.color;
+                        const r = parseInt(baseColor.slice(1, 3), 16) / 255;
+                        const g = parseInt(baseColor.slice(3, 5), 16) / 255;
+                        const b = parseInt(baseColor.slice(5, 7), 16) / 255;
+                        
+                        // Create color gradient based on height
+                        const vertexColor = [
+                            Math.min(1, r * (0.5 + normalizedHeight)),
+                            Math.min(1, g * (0.5 + normalizedHeight)),
+                            Math.min(1, b * (0.5 + normalizedHeight))
+                        ];
+                        
+                        colors.push(vertexColor);
+                    } else {
+                        // Use base color
+                        const r = parseInt(params.color.slice(1, 3), 16) / 255;
+                        const g = parseInt(params.color.slice(3, 5), 16) / 255;
+                        const b = parseInt(params.color.slice(5, 7), 16) / 255;
+                        colors.push([r, g, b]);
+                    }
+                }
+            }
+            
+            // Create faces (triangles)
+            const faces = [];
+            
+            for (let z = 0; z < res - 1; z++) {
+                for (let x = 0; x < res - 1; x++) {
+                    const a = z * res + x;
+                    const b = z * res + x + 1;
+                    const c = (z + 1) * res + x + 1;
+                    const d = (z + 1) * res + x;
+                    
+                    // Create two triangles for each grid cell
+                    faces.push([a, b, c]);
+                    faces.push([a, c, d]);
+                }
+            }
+            
+            terrain = {
+                vertices: vertices,
+                faces: faces,
+                colors: colors
+            };
+        }
+
+        function projectPoint(point, rotationX, rotationY, distance) {
+            // Apply rotation
+            const rotX = Matrix.rotationX(rotationX);
+            const rotY = Matrix.rotationY(rotationY);
+            
+            let rotated = Matrix.multiplyVector(rotX, point);
+            rotated = Matrix.multiplyVector(rotY, rotated);
+            
+            // Apply perspective projection
+            const scale = distance / (distance + rotated[2]);
+            const x = rotated[0] * scale + canvas.width / 2;
+            const y = -rotated[1] * scale + canvas.height / 2;
+            
+            return [x, y, rotated[2]];
+        }
+
+        function randomizeTerrain() {
+            // Randomize parameters
+            params.amplitude = 20 + Math.floor(Math.random() * 60);
+            params.scale = 20 + Math.floor(Math.random() * 100);
+            params.detail = 1 + Math.floor(Math.random() * 6);
+            
+            // Update sliders and values
+            amplitudeSlider.value = params.amplitude;
+            amplitudeValue.textContent = params.amplitude;
+            
+            scaleSlider.value = params.scale;
+            scaleValue.textContent = params.scale;
+            
+            detailSlider.value = params.detail;
+            detailValue.textContent = params.detail;
+            
+            // Generate random color
+            const randomColor = '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+            params.color = randomColor;
+            colorPicker.value = randomColor;
+            
+            // Regenerate the terrain
+            generateTerrainMesh();
+        }
+
+        function exportAsPNG() {
+            const link = document.createElement('a');
+            link.download = '3d-terrain-visualization.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        function drawTerrain() {
+            // Clear canvas
+            ctx.fillStyle = params.backgroundColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Sort faces by depth for primitive z-buffering
+            const projectedFaces = [];
+            
+            for (let i = 0; i < terrain.faces.length; i++) {
+                const face = terrain.faces[i];
+                const v1 = terrain.vertices[face[0]];
+                const v2 = terrain.vertices[face[1]];
+                const v3 = terrain.vertices[face[2]];
+                
+                // Calculate face center for depth sorting
+                const centerX = (v1[0] + v2[0] + v3[0]) / 3;
+                const centerY = (v1[1] + v2[1] + v3[1]) / 3;
+                const centerZ = (v1[2] + v2[2] + v3[2]) / 3;
+                
+                // Project all three vertices
+                const p1 = projectPoint(v1, params.rotationX, params.rotationY, params.distance);
+                const p2 = projectPoint(v2, params.rotationX, params.rotationY, params.distance);
+                const p3 = projectPoint(v3, params.rotationX, params.rotationY, params.distance);
+                
+                // Calculate face depth (average z of projected points)
+                const depth = (p1[2] + p2[2] + p3[2]) / 3;
+                
+                projectedFaces.push({
+                    points: [p1, p2, p3],
+                    depth: depth,
+                    index: i,
+                    vertices: [face[0], face[1], face[2]]
+                });
+            }
+            
+            // Sort faces back-to-front
+            projectedFaces.sort((a, b) => b.depth - a.depth);
+            
+            // Draw faces
+            for (const face of projectedFaces) {
+                const points = face.points;
+                
+                ctx.beginPath();
+                ctx.moveTo(points[0][0], points[0][1]);
+                ctx.lineTo(points[1][0], points[1][1]);
+                ctx.lineTo(points[2][0], points[2][1]);
+                ctx.closePath();
+                
+                // Fill face
+                if (params.fill) {
+                    // Average colors of vertices
+                    const color1 = terrain.colors[face.vertices[0]];
+                    const color2 = terrain.colors[face.vertices[1]];
+                    const color3 = terrain.colors[face.vertices[2]];
+                    
+                    const r = (color1[0] + color2[0] + color3[0]) / 3;
+                    const g = (color1[1] + color2[1] + color3[1]) / 3;
+                    const b = (color1[2] + color2[2] + color3[2]) / 3;
+                    
+                    // Apply lighting based on face orientation
+                    const lightFactor = 0.7 + 0.3 * Math.abs(face.depth / params.distance);
+                    
+                    ctx.fillStyle = `rgb(${Math.floor(r * 255 * lightFactor)}, ${Math.floor(g * 255 * lightFactor)}, ${Math.floor(b * 255 * lightFactor)})`;
+                    ctx.fill();
+                }
+                
+                // Draw wireframe
+                if (params.wireframe) {
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 0.5;
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function animate() {
+            // Auto-rotate if enabled
+            if (params.autoRotate) {
+                params.rotationY += params.speed / 100;
+                if (params.rotationY > 180) params.rotationY -= 360;
+                
+                // Update slider value
+                rotationYSlider.value = params.rotationY;
+                rotationYValue.textContent = Math.floor(params.rotationY);
+            }
+            
+            drawTerrain();
+            requestAnimationFrame(animate);
+        }
+
+        // Initialize and start
+        generateTerrainMesh();
+        animate();
+    </script>
+</body>
+</html>
